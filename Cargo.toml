@@ -2,9 +2,18 @@
 name = "rust-netcat"
 version = "0.1.0"
 edition = "2021"
+description = "A netcat clone written in Rust"
+license = "Unlicense"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[[bin]]
+name = "rnc"
+path = "src/main.rs"
+
 [dependencies]
 clap = { version = "4.4.8", features = ["derive"] }
-reqwest = "0.11.22"
+
+[profile.release]
+opt-level = 3
+lto = true
