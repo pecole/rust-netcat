@@ -1,60 +1,55 @@
-use clap::{Parser, Subcommand};
-use std::path::PathBuf;
+mod cli;
+mod tcp;
+mod udp;
 
-#[derive(Parser)]
-#[command(author, version, about, long_about = None)]
-struct Cli {
-    /// Optional name operate on
-    name: Option<String>,
+use clap::Parser;
+use cli::Cli;
+use std::process::ExitCode;
 
-    /// Sets a custom config file
-    #[arg(short, long, value_name = "FILE")]
-    config: Option<PathBuf>,
-
-    /// Tern debugging infomation on
-    #[arg(short, long, action = clap::ArgAction::Count)]
-    debug: u8,
-
-    #[command(subcommand)]
-    command: Option<Commands>,
-}
-
-#[derive(Subcommand)]
-enum Commands {
-    /// dose testing things
-    Test {
-        /// lists test values
-        #[arg(short, long)]
-        list: bool,
-    },
-}
-
-fn main() {
+fn main() -> ExitCode {
     let cli = Cli::parse();
 
-    if let Some(name) = cli.name.as_deref() {
-        println!("Value for name: {}", name);
-    };
-
-    if let Some(config_path) = cli.config.as_deref() {
-        println!("Value for config: {}", config_path.display());
-    };
-
-    match cli.debug {
-        0 => println!("Debugging mode is off"),
-        1 => println!("Debugging mode is kind of on"),
-        2 => println!("Debugging mode is on"),
-        _ => println!("Don't be crazy"),
-    }
-
-    match &cli.command {
-        Some(Commands::Test { list }) => {
-            if *list {
-                println!("Listing test values...");
-            } else {
-                println!("Not listing test values...");
-            }
+    let target = match cli.resolve_target() {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return ExitCode::FAILURE;
         }
-        None => {}
+    };
+
+    if cli.exec.is_some() && cli.udp {
+        eprintln!("error: -e/--exec is not supported together with -u/--udp");
+        return ExitCode::FAILURE;
     }
+
+    let result = if cli.listen {
+        if cli.udp {
+            udp::run_server(&target.addr, target.port, cli.timeout, cli.verbose)
+        } else {
+            tcp::run_server(
+                &target.addr,
+                target.port,
+                cli.keep_open,
+                cli.exec.as_deref(),
+                cli.verbose,
+            )
+        }
+    } else if cli.udp {
+        udp::run_client(&target.addr, target.port, cli.timeout, cli.verbose)
+    } else {
+        tcp::run_client(
+            &target.addr,
+            target.port,
+            cli.timeout,
+            cli.exec.as_deref(),
+            cli.verbose,
+        )
+    };
+
+    if let Err(e) = result {
+        eprintln!("error: {e}");
+        return ExitCode::FAILURE;
+    }
+
+    ExitCode::SUCCESS
 }
